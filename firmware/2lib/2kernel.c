@@ -74,7 +74,6 @@ vb2_error_t vb2api_kernel_phase1(struct vb2_context *ctx)
 	/* Read kernel version from secdata. */
 	sd->kernel_version_secdata =
 		vb2_secdata_kernel_get(ctx, VB2_SECDATA_KERNEL_VERSIONS);
-	sd->kernel_version = sd->kernel_version_secdata;
 
 	vb2_fill_dev_boot_flags(ctx);
 
