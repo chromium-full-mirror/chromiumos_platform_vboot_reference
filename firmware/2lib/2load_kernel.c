@@ -15,6 +15,7 @@
 #include "2sysincludes.h"
 #include "cgptlib.h"
 #include "cgptlib_internal.h"
+#include "gpt.h"
 #include "gpt_misc.h"
 #include "vboot_api.h"
 
@@ -686,9 +687,10 @@ vb2_error_t vb2api_load_kernel(struct vb2_context *ctx,
 	}
 
 	/* Loop over candidate kernel partitions */
-	uint64_t part_start, part_size;
-	while (GptNextKernelEntry(&gpt, &part_start, &part_size) ==
-	       GPT_SUCCESS) {
+	GptEntry *entry;
+	while ((entry = GptNextKernelEntry(&gpt))) {
+		uint64_t part_start = entry->starting_lba;
+		uint64_t part_size = GptGetEntrySizeLba(entry);
 		kernel_version = 0;
 
 		VB2_DEBUG("Found kernel entry at %"
@@ -753,9 +755,6 @@ vb2_error_t vb2api_load_kernel(struct vb2_context *ctx,
 	GetCurrentKernelUniqueGuid(&gpt, &params->partition_guid);
 
 	VB2_DEBUG("Good partition %d\n", params->partition_number);
-
-	GptEntry *entries = (GptEntry *)gpt.primary_entries;
-	GptEntry *entry = entries + gpt.current_kernel;
 
 	if (GetEntrySuccessful(entry)) {
 		if (ctx->boot_mode == VB2_BOOT_MODE_NORMAL)
