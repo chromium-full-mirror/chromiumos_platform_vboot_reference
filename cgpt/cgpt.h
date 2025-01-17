@@ -89,16 +89,6 @@ int Load(struct drive *drive, uint8_t *buf, const uint64_t sector, const uint64_
 int Save(struct drive *drive, const uint8_t *buf, const uint64_t sector,
 	 const uint64_t sector_bytes, const uint64_t sector_count);
 
-/* Constant global type values to compare against */
-extern const Guid guid_chromeos_firmware;
-extern const Guid guid_chromeos_kernel;
-extern const Guid guid_chromeos_rootfs;
-extern const Guid guid_android_vbmeta;
-extern const Guid guid_linux_data;
-extern const Guid guid_chromeos_reserved;
-extern const Guid guid_efi;
-extern const Guid guid_unused;
-
 int ReadPMBR(struct drive *drive);
 int WritePMBR(struct drive *drive);
 
