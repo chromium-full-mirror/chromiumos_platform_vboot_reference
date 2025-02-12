@@ -411,6 +411,7 @@ int GetEntryLegacyBoot(const GptEntry *e)
 	return e->attrs.fields.legacy_boot;
 }
 
+test_mockable
 int GetEntrySuccessful(const GptEntry *e)
 {
 	return (e->attrs.fields.gpt_att & CGPT_ATTRIBUTE_SUCCESSFUL_MASK) >>
