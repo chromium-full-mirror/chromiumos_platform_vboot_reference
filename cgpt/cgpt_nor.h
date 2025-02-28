@@ -29,4 +29,4 @@ int ReadNorFlash(const char *dir);
 // Write "rw_gpt" back to NOR flash. We write the file in two parts for safety.
 int WriteNorFlash(const char *dir);
 
-#endif  /* VBOOT_REFERENCE_CGPT_NOR_H_ */
+#endif /* VBOOT_REFERENCE_CGPT_NOR_H_ */

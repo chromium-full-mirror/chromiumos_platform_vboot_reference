@@ -18,36 +18,36 @@
 #include "gpt.h"
 
 struct legacy_partition {
-  uint8_t  status;
-  uint8_t  f_head;
-  uint8_t  f_sect;
-  uint8_t  f_cyl;
-  uint8_t  type;
-  uint8_t  l_head;
-  uint8_t  l_sect;
-  uint8_t  l_cyl;
-  uint32_t f_lba;
-  uint32_t num_sect;
+	uint8_t status;
+	uint8_t f_head;
+	uint8_t f_sect;
+	uint8_t f_cyl;
+	uint8_t type;
+	uint8_t l_head;
+	uint8_t l_sect;
+	uint8_t l_cyl;
+	uint32_t f_lba;
+	uint32_t num_sect;
 } __attribute__((packed));
 
 // syslinux uses this format:
 struct pmbr {
-  uint8_t                 bootcode[424];
-  Guid                    boot_guid;
-  uint32_t                disk_id;
-  uint8_t                 magic[2];     // 0x1d, 0x9a
-  struct legacy_partition part[4];
-  uint8_t                 sig[2];       // 0x55, 0xaa
+	uint8_t bootcode[424];
+	Guid boot_guid;
+	uint32_t disk_id;
+	uint8_t magic[2]; // 0x1d, 0x9a
+	struct legacy_partition part[4];
+	uint8_t sig[2]; // 0x55, 0xaa
 } __attribute__((packed));
 
 void PMBRToStr(struct pmbr *pmbr, char *str, unsigned int buflen);
 
 // Handle to the drive storing the GPT.
 struct drive {
-  uint64_t size;    /* total size (in bytes) */
-  GptData gpt;
-  struct pmbr pmbr;
-  int fd;       /* file descriptor */
+	uint64_t size; /* total size (in bytes) */
+	GptData gpt;
+	struct pmbr pmbr;
+	int fd; /* file descriptor */
 };
 
 // Opens a block device or file, loads raw GPT data from it.
@@ -59,8 +59,7 @@ struct drive {
 //
 // Returns CGPT_FAILED if any error happens.
 // Returns CGPT_OK if success and information are stored in 'drive'. */
-int DriveOpen(const char *drive_path, struct drive *drive, int mode,
-              uint64_t drive_size);
+int DriveOpen(const char *drive_path, struct drive *drive, int mode, uint64_t drive_size);
 int DriveClose(struct drive *drive, int update_as_needed);
 int CheckValid(const struct drive *drive);
 
@@ -74,10 +73,8 @@ int CheckValid(const struct drive *drive);
  *
  * Returns CGPT_OK for successful. Aborts if any error occurs.
  */
-int Load(struct drive *drive, uint8_t *buf,
-                const uint64_t sector,
-                const uint64_t sector_bytes,
-                const uint64_t sector_count);
+int Load(struct drive *drive, uint8_t *buf, const uint64_t sector, const uint64_t sector_bytes,
+	 const uint64_t sector_count);
 
 /* Saves sectors to 'drive'.
  *
@@ -89,11 +86,8 @@ int Load(struct drive *drive, uint8_t *buf,
  *
  * Returns CGPT_OK for successful, CGPT_FAILED for failed.
  */
-int Save(struct drive *drive, const uint8_t *buf,
-                const uint64_t sector,
-                const uint64_t sector_bytes,
-                const uint64_t sector_count);
-
+int Save(struct drive *drive, const uint8_t *buf, const uint64_t sector,
+	 const uint64_t sector_bytes, const uint64_t sector_count);
 
 /* Constant global type values to compare against */
 extern const Guid guid_chromeos_firmware;
@@ -115,8 +109,8 @@ int WritePMBR(struct drive *drive);
  * Return: CGPT_OK --- all character are converted successfully.
  *         CGPT_FAILED --- convert error, i.e. output buffer is too short.
  */
-int UTF16ToUTF8(const uint16_t *utf16, unsigned int maxinput,
-                uint8_t *utf8, unsigned int maxoutput);
+int UTF16ToUTF8(const uint16_t *utf16, unsigned int maxinput, uint8_t *utf8,
+		unsigned int maxoutput);
 
 /* Convert null-terminated UTF8 string to UTF16.
  * Caller must prepare enough space for UTF16, which is the byte length of UTF8
@@ -136,31 +130,25 @@ void EntryDetails(GptEntry *entry, uint32_t index, int raw);
 uint32_t GetNumberOfEntries(const struct drive *drive);
 GptEntry *GetEntry(GptData *gpt, int secondary, uint32_t entry_index);
 
-void SetRequired(struct drive *drive, int secondary, uint32_t entry_index,
-                 int required);
+void SetRequired(struct drive *drive, int secondary, uint32_t entry_index, int required);
 int GetRequired(struct drive *drive, int secondary, uint32_t entry_index);
-void SetLegacyBoot(struct drive *drive, int secondary, uint32_t entry_index,
-                   int legacy_boot);
+void SetLegacyBoot(struct drive *drive, int secondary, uint32_t entry_index, int legacy_boot);
 int GetLegacyBoot(struct drive *drive, int secondary, uint32_t entry_index);
-void SetPriority(struct drive *drive, int secondary, uint32_t entry_index,
-                 int priority);
+void SetPriority(struct drive *drive, int secondary, uint32_t entry_index, int priority);
 int GetPriority(struct drive *drive, int secondary, uint32_t entry_index);
-void SetTries(struct drive *drive, int secondary, uint32_t entry_index,
-              int tries);
+void SetTries(struct drive *drive, int secondary, uint32_t entry_index, int tries);
 int GetTries(struct drive *drive, int secondary, uint32_t entry_index);
-void SetSuccessful(struct drive *drive, int secondary, uint32_t entry_index,
-                   int success);
+void SetSuccessful(struct drive *drive, int secondary, uint32_t entry_index, int success);
 int GetSuccessful(struct drive *drive, int secondary, uint32_t entry_index);
 
-void SetRaw(struct drive *drive, int secondary, uint32_t entry_index,
-           uint32_t raw);
+void SetRaw(struct drive *drive, int secondary, uint32_t entry_index, uint32_t raw);
 
 void UpdateAllEntries(struct drive *drive);
 
 uint8_t RepairHeader(GptData *gpt, const uint32_t valid_headers);
 uint8_t RepairEntries(GptData *gpt, const uint32_t valid_entries);
 void UpdateCrc(GptData *gpt);
-int IsSynonymous(const GptHeader* a, const GptHeader* b);
+int IsSynonymous(const GptHeader *a, const GptHeader *b);
 
 int IsUnused(struct drive *drive, int secondary, uint32_t index);
 int IsBootable(struct drive *drive, int secondary, uint32_t index);
@@ -192,7 +180,7 @@ int cmd_edit(int argc, char *argv[]);
 int cmd_prioritize(int argc, char *argv[]);
 int cmd_legacy(int argc, char *argv[]);
 
-#define ARRAY_COUNT(array) (sizeof(array)/sizeof((array)[0]))
+#define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 const char *GptError(int errnum);
 
 // Size in chars of the GPT Entry's PartitionName field
@@ -200,11 +188,13 @@ const char *GptError(int errnum);
 
 /* The standard "assert" macro goes away when NDEBUG is defined. This doesn't.
  */
-#define require(A) do { \
-  if (!(A)) { \
-    fprintf(stderr, "condition (%s) failed at %s:%d\n", \
-            #A, __FILE__, __LINE__); \
-    exit(1); } \
-  } while (0)
+#define require(A)                                                                             \
+	do {                                                                                   \
+		if (!(A)) {                                                                    \
+			fprintf(stderr, "condition (%s) failed at %s:%d\n", #A, __FILE__,      \
+				__LINE__);                                                     \
+			exit(1);                                                               \
+		}                                                                              \
+	} while (0)
 
-#endif  /* VBOOT_REFERENCE_CGPT_H_ */
+#endif /* VBOOT_REFERENCE_CGPT_H_ */
