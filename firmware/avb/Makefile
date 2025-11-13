@@ -41,7 +41,7 @@ CFLAGS += -DUSE_LIBAVB -Ifirmware/avb -I${LIBAVB_SRCDIR} -I${LIBAVB_SRCDIR}/liba
 AVB_CFLAGS += -DAVB_COMPILATION -I${LIBAVB_SRCDIR}/libavb/crypto
 
 # TODO(b/329135129): Fix maybe uninitialized variables in upstream libavb
-AVB_CFLAGS += -Wno-maybe-uninitialized
+AVB_CFLAGS += $(call test_ccflag,-Wno-maybe-uninitialized)
 
 # Add avb-related objects to the fwlib library
 LIBAVB_OBJS = ${LIBAVB_SRCS:${LIBAVB_SRCDIR}/libavb/%.c=${BUILD}/libavb/%.o}
