@@ -765,7 +765,8 @@ TEST20_NAMES = \
 
 ifneq ($(filter-out 0,${USE_AVB}),)
 TEST2X_NAMES += \
-	tests/vb2_avb_tests
+	tests/vb2_avb_tests \
+	tests/vb2_load_android_tests
 endif
 
 TEST21_NAMES = \
@@ -1297,6 +1298,7 @@ run2tests: install_for_test
 	${RUNTEST} ${BUILD_RUN}/tests/vb2_auxfw_sync_tests
 ifneq ($(filter-out 0,${USE_AVB}),)
 	${RUNTEST} ${BUILD_RUN}/tests/vb2_avb_tests ${TEST_KEYS}
+	${RUNTEST} ${BUILD_RUN}/tests/vb2_load_android_tests
 endif
 	${RUNTEST} ${BUILD_RUN}/tests/vb2_common_tests
 	${RUNTEST} ${BUILD_RUN}/tests/vb2_common2_tests ${TEST_KEYS}
