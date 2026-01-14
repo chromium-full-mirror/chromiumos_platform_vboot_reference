@@ -126,6 +126,11 @@ static void ResetMocks(void)
 }
 
 /* Mocks */
+int IsChromeOS(const GptEntry *e)
+{
+	return 1;
+}
+
 struct vb2_gbb_header *vb2_get_gbb(struct vb2_context *c)
 {
 	return &gbb;
