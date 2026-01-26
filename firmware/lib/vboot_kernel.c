@@ -656,8 +656,7 @@ vb2_error_t LoadKernel(struct vb2_context *ctx,
 			if (lpflags & VB2_LOAD_PARTITION_FLAG_VBLOCK_ONLY)
 				continue;
 #ifdef USE_LIBAVB
-			rv = vb2_load_android(ctx, &gpt, entry, params, disk_info->handle,
-					      &sd->kernel_version);
+			rv = vb2_load_android(ctx, &gpt, entry, params, disk_info->handle);
 #else
 			/* Don't allow to boot android without AVB */
 			rv = VB2_ERROR_LK_INVALID_KERNEL_FOUND;

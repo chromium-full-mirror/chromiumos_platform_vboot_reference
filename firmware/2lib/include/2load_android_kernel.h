@@ -22,7 +22,6 @@
  * @param entry			GPT entry with VBMETA partition
  * @param params		Load-kernel parameters
  * @param disk_handle		Handle to the disk containing kernel
- * @param kernel_version	Pointer to kernel version
  * @return VB2_SUCCESS, or non-zero error code.
  */
 vb2_error_t vb2_load_android(
@@ -30,7 +29,6 @@ vb2_error_t vb2_load_android(
 	GptData *gpt,
 	GptEntry *entry,
 	VbSelectAndLoadKernelParams *params,
-	VbExDiskHandle_t disk_handle,
-	uint32_t *kernel_version);
+	VbExDiskHandle_t disk_handle);
 
 #endif  /* VBOOT_REFERENCE_2LOAD_ANDROID_KERNEL_H_ */
