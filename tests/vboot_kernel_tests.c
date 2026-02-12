@@ -246,6 +246,11 @@ void GetCurrentKernelUniqueGuid(GptData *gpt, void *dest)
 	memcpy(dest, fake_guid, sizeof(fake_guid));
 }
 
+int GetEntrySuccessful(const GptEntry *e)
+{
+	return 1;
+}
+
 int vb2_unpack_key_buffer(struct vb2_public_key *key,
 		   const uint8_t *buf,
 		   uint32_t size)
@@ -704,7 +709,7 @@ static void LoadKernelTest(void)
 	mock_parts[1].start = 300;
 	mock_parts[1].size = 150;
 	TestLoadKernel(0, "Two kernels roll forward");
-	TEST_EQ(mock_part_next, 2, "  read both");
+	TEST_EQ(mock_part_next, 1, "  read one");
 	TEST_EQ(shared->kernel_version_tpm, 0x30001, "  shared version");
 
 	ResetMocks();
