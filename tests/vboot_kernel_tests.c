@@ -264,6 +264,11 @@ int GptNextKernelEntry(GptData *gpt, uint64_t *start_sector, uint64_t *size)
 	return GPT_SUCCESS;
 }
 
+int GetEntrySuccessful(const GptEntry *e)
+{
+	return 1;
+}
+
 void GetCurrentKernelUniqueGuid(GptData *gpt, void *dest)
 {
 	static char fake_guid[] = "FakeGuid";
@@ -727,7 +732,7 @@ static void LoadKernelTest(void)
 	mock_parts[1].start = 300;
 	mock_parts[1].size = 150;
 	TestLoadKernel(0, "Two kernels roll forward");
-	TEST_EQ(mock_part_next, 2, "  read both");
+	TEST_EQ(mock_part_next, 1, "  read one");
 	TEST_EQ(shared->kernel_version_tpm, 0x30001, "  shared version");
 
 	ResetMocks();

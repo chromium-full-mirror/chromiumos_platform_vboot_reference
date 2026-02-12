@@ -335,9 +335,6 @@ static vb2_error_t vb2_load_partition(
 		return VB2_ERROR_LOAD_PARTITION_VERIFY_VBLOCK;
 	}
 
-	if (flags & VB2_LOAD_PARTITION_VBLOCK_ONLY)
-		return VB2_SUCCESS;
-
 	struct vb2_keyblock *keyblock = get_keyblock(kbuf);
 	struct vb2_kernel_preamble *preamble = get_preamble(kbuf);
 
@@ -434,7 +431,6 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 	VbSharedDataHeader *shared = sd->vbsd;
 	VbSharedDataKernelCall *shcall = NULL;
 	int found_partitions = 0;
-	uint32_t lowest_version = LOWEST_TPM_VERSION;
 	vb2_error_t retval = VB2_ERROR_UNKNOWN;
 	vb2_error_t rv;
 
@@ -467,7 +463,7 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 		if (VB2_SUCCESS != rv) {
 			VB2_DEBUG("GBB read recovery key failed.\n");
 			retval = VBERROR_INVALID_GBB;
-			goto load_kernel_exit;
+			goto exit;
 		}
 	} else {
 		/* Use the kernel subkey passed from firmware verification */
@@ -484,6 +480,7 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 	if (0 != AllocAndReadGptData(params->disk_handle, &gpt)) {
 		VB2_DEBUG("Unable to read GPT data\n");
 		shcall->check_result = VBSD_LKC_CHECK_GPT_READ_ERROR;
+		retval = VBERROR_NO_KERNEL_FOUND;
 		goto gpt_done;
 	}
 
@@ -491,11 +488,14 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 	if (GPT_SUCCESS != GptInit(&gpt)) {
 		VB2_DEBUG("Error parsing GPT\n");
 		shcall->check_result = VBSD_LKC_CHECK_GPT_PARSE_ERROR;
+		retval = VBERROR_NO_KERNEL_FOUND;
 		goto gpt_done;
 	}
 
-	/* Loop over candidate kernel partitions */
 	uint64_t part_start, part_size;
+	VbSharedDataKernelPart *shpart;
+	rv = VB2_ERROR_UNKNOWN;
+	/* Loop over candidate kernel partitions */
 	while (GPT_SUCCESS ==
 	       GptNextKernelEntry(&gpt, &part_start, &part_size)) {
 
@@ -508,9 +508,8 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 		 * called many times, so initialize the partition entry each
 		 * time.
 		 */
-		VbSharedDataKernelPart *shpart =
-				shcall->parts + (shcall->kernel_parts_found
-				& (VBSD_MAX_KERNEL_PARTS - 1));
+		shpart = shcall->parts + (shcall->kernel_parts_found &
+				(VBSD_MAX_KERNEL_PARTS - 1));
 		memset(shpart, 0, sizeof(VbSharedDataKernelPart));
 		shpart->sector_start = part_start;
 		shpart->sector_count = part_size;
@@ -535,124 +534,81 @@ vb2_error_t LoadKernel(struct vb2_context *ctx, LoadKernelParams *params)
 			continue;
 		}
 
-		uint32_t lpflags = 0;
-		if (params->partition_number > 0) {
-			/*
-			 * If we already have a good kernel, we only needed to
-			 * look at the vblock versions to check for rollback.
-			 */
-			lpflags |= VB2_LOAD_PARTITION_VBLOCK_ONLY;
-		}
-
 		rv = vb2_load_partition(ctx,
 					stream,
 					kernel_subkey,
-					lpflags,
+					0,
 					params,
 					shared->kernel_version_tpm,
 					shpart,
 					&wb);
 		VbExStreamClose(stream);
 
-		if (rv != VB2_SUCCESS) {
-			VB2_DEBUG("Marking kernel as invalid.\n");
-			GptUpdateKernelEntry(&gpt, GPT_UPDATE_ENTRY_BAD);
-			continue;
-		}
-
-		int keyblock_valid = (shpart->flags &
-				      VBSD_LKP_FLAG_KEY_BLOCK_VALID);
-		if (keyblock_valid) {
-			shared->flags |= VBSD_KERNEL_KEY_VERIFIED;
-			/* Track lowest version from a valid header. */
-			if (lowest_version > shpart->combined_version)
-				lowest_version = shpart->combined_version;
-		}
-		VB2_DEBUG("Key block valid: %d\n", keyblock_valid);
-		VB2_DEBUG("Combined version: %u\n", shpart->combined_version);
-
-		/*
-		 * If we're only looking at headers, we're done with this
-		 * partition.
-		 */
-		if (lpflags & VB2_LOAD_PARTITION_VBLOCK_ONLY)
-			continue;
-
-		/*
-		 * Otherwise, we found a partition we like.
-		 *
-		 * TODO: GPT partitions start at 1, but cgptlib starts them at
-		 * 0.  Adjust here, until cgptlib is fixed.
-		 */
-		params->partition_number = gpt.current_kernel + 1;
-
-		/*
-		 * TODO: GetCurrentKernelUniqueGuid() should take a destination
-		 * size, or the dest should be a struct, so we know it's big
-		 * enough.
-		 */
-		GetCurrentKernelUniqueGuid(&gpt, &params->partition_guid);
-
-		/* Update GPT to note this is the kernel we're trying.
-		 * But not when we assume that the boot process may
-		 * not complete for valid reasons (eg. early shutdown).
-		 */
-		if (!(shared->flags & VBSD_NOFAIL_BOOT))
-			GptUpdateKernelEntry(&gpt, GPT_UPDATE_ENTRY_TRY);
-
-		/*
-		 * If we're in recovery mode or we're about to boot a
-		 * non-officially-signed kernel, there's no rollback
-		 * protection, so we can stop at the first valid kernel.
-		 */
-		if (kBootRecovery == shcall->boot_mode || !keyblock_valid) {
-			VB2_DEBUG("In recovery mode or dev-signed kernel\n");
+		if (rv == VB2_SUCCESS)
 			break;
-		}
 
-		/*
-		 * Otherwise, we do care about the key index in the TPM.  If
-		 * the good partition's key version is the same as the tpm,
-		 * then the TPM doesn't need updating; we can stop now.
-		 * Otherwise, we'll check all the other headers to see if they
-		 * contain a newer key.
-		 */
-		if (shpart->combined_version == shared->kernel_version_tpm) {
-			VB2_DEBUG("Same kernel version\n");
-			break;
+		VB2_DEBUG("Marking kernel as invalid.\n");
+		GptUpdateKernelEntry(&gpt, GPT_UPDATE_ENTRY_BAD);
+	}
+
+	if (rv != VB2_SUCCESS) {
+		if (found_partitions > 0) {
+			shcall->check_result = VBSD_LKC_CHECK_INVALID_PARTITIONS;
+			retval = VBERROR_INVALID_KERNEL_FOUND;
+		} else {
+			shcall->check_result = VBSD_LKC_CHECK_NO_PARTITIONS;
+			retval = VBERROR_NO_KERNEL_FOUND;
 		}
-	} /* while(GptNextKernelEntry) */
+		goto gpt_done;
+	}
+
+	shcall->check_result = VBSD_LKC_CHECK_GOOD_PARTITION;
+	shared->kernel_version_lowest = shpart->combined_version;
+
+	int keyblock_valid = (shpart->flags & VBSD_LKP_FLAG_KEY_BLOCK_VALID);
+	VB2_DEBUG("Keyblock valid: %d\n", keyblock_valid);
+
+	if (keyblock_valid) {
+		shared->flags |= VBSD_KERNEL_KEY_VERIFIED;
+		if (shpart->combined_version > shared->kernel_version_tpm) {
+			GptEntry *entry = (GptEntry *)gpt.primary_entries +
+				gpt.current_kernel;
+			if (GetEntrySuccessful(entry))
+				shared->kernel_version_tpm = shpart->combined_version;
+		}
+	}
+
+	VB2_DEBUG("Final kernel version: 0x%x\n", shared->kernel_version_lowest);
+
+	/*
+	 * TODO: GPT partitions start at 1, but cgptlib starts them at
+	 * 0.  Adjust here, until cgptlib is fixed.
+	 */
+	params->partition_number = gpt.current_kernel + 1;
+	VB2_DEBUG("Good partition %d\n", params->partition_number);
+
+	/*
+	 * TODO: GetCurrentKernelUniqueGuid() should take a destination
+	 * size, or the dest should be a struct, so we know it's big
+	 * enough.
+	 */
+	GetCurrentKernelUniqueGuid(&gpt, &params->partition_guid);
+
+	/* Update GPT to note this is the kernel we're trying.
+	 * But not when we assume that the boot process may
+	 * not complete for valid reasons (eg. early shutdown).
+	 */
+	if (!(shared->flags & VBSD_NOFAIL_BOOT))
+		GptUpdateKernelEntry(&gpt, GPT_UPDATE_ENTRY_TRY);
+
+	/* Success! */
+	retval = VB2_SUCCESS;
 
 gpt_done:
 	/* Write and free GPT data */
 	WriteAndFreeGptData(params->disk_handle, &gpt);
 
-	/* Handle finding a good partition */
-	if (params->partition_number > 0) {
-		VB2_DEBUG("Good partition %d\n", params->partition_number);
-		shcall->check_result = VBSD_LKC_CHECK_GOOD_PARTITION;
-		shared->kernel_version_lowest = lowest_version;
-		/*
-		 * Sanity check - only store a new TPM version if we found one.
-		 * If lowest_version is still at its initial value, we didn't
-		 * find one; for example, we're in developer mode and just
-		 * didn't look.
-		 */
-		if (lowest_version != LOWEST_TPM_VERSION &&
-		    lowest_version > shared->kernel_version_tpm)
-			shared->kernel_version_tpm = lowest_version;
-
-		/* Success! */
-		retval = VB2_SUCCESS;
-	} else if (found_partitions > 0) {
-		shcall->check_result = VBSD_LKC_CHECK_INVALID_PARTITIONS;
-		retval = VBERROR_INVALID_KERNEL_FOUND;
-	} else {
-		shcall->check_result = VBSD_LKC_CHECK_NO_PARTITIONS;
-		retval = VBERROR_NO_KERNEL_FOUND;
-	}
-
-load_kernel_exit:
+exit:
 	shcall->return_code = (uint8_t)retval;
 	return retval;
 }
