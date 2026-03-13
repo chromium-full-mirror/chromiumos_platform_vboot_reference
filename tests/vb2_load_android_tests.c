@@ -35,8 +35,10 @@ GptEntry entries[NUM_OF_ENTRIES];
 struct vendor_boot_img_hdr_v4 vendor_boot_hdr;
 struct boot_img_hdr_v4 init_boot_hdr;
 
+enum avb_fail {NO_FAIL, VERIFY_FAIL, ROLLBACK_FAIL};
+
 uint64_t rollback_value;
-bool avb_verification_fails;
+enum avb_fail avb_verification_fails;
 bool init_boot_missing, vendor_boot_missing;
 uint64_t sector_to_read;
 
@@ -111,10 +113,15 @@ AvbSlotVerifyResult avb_slot_verify(AvbOps *ops, const char *const *requested_pa
 	verify_data->cmdline = (char *)"";
 	*out_data = verify_data;
 
-	if (avb_verification_fails)
+	switch (avb_verification_fails) {
+	case VERIFY_FAIL:
 		return AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION;
-	else
+	case ROLLBACK_FAIL:
+		return AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX;
+	case NO_FAIL:
+	default:
 		return AVB_SLOT_VERIFY_RESULT_OK;
+	}
 }
 
 void avb_slot_verify_data_free(AvbSlotVerifyData *data)
@@ -147,7 +154,7 @@ void VbExStreamClose(VbExStream_t stream) {}
 static void reset_mocks(void)
 {
 	rollback_value = 0x1;
-	avb_verification_fails = false;
+	avb_verification_fails = NO_FAIL;
 	init_boot_missing = false;
 	vendor_boot_missing = false;
 
@@ -231,16 +238,30 @@ static void load_android_tests(void)
 
 	// AVB verification fails
 	reset_mocks();
-	avb_verification_fails = true;
+	avb_verification_fails = VERIFY_FAIL;
 	TEST_EQ(vb2api_load_kernel(ctx, &lkp, &disk_info), VB2_ERROR_LK_INVALID_KERNEL_FOUND,
 		"AVB verification fails");
 
 	// AVB verification fails in developer mode
 	reset_mocks();
-	avb_verification_fails = true;
+	avb_verification_fails = VERIFY_FAIL;
 	SET_BOOT_MODE(ctx, VB2_BOOT_MODE_DEVELOPER);
 	TEST_EQ(vb2api_load_kernel(ctx, &lkp, &disk_info), VB2_SUCCESS,
 		"AVB verification fails in developer mode");
+
+	// Rollback protection in developer mode
+	reset_mocks();
+	avb_verification_fails = ROLLBACK_FAIL;
+	SET_BOOT_MODE(ctx, VB2_BOOT_MODE_DEVELOPER);
+	TEST_EQ(vb2api_load_kernel(ctx, &lkp, &disk_info), VB2_SUCCESS,
+		"Rollback protection in developer mode");
+
+	// Rollback protection in normal mode
+	reset_mocks();
+	avb_verification_fails = ROLLBACK_FAIL;
+	TEST_EQ(vb2api_load_kernel(ctx, &lkp, &disk_info), VB2_ERROR_LK_ROLLBACK,
+		"Rollback protection in normal mode");
+
 
 	// Missing init_boot partition
 	reset_mocks();

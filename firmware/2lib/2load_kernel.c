@@ -653,6 +653,7 @@ vb2_error_t vb2api_load_kernel(struct vb2_context *ctx,
 	int found_partitions = 0;
 	uint32_t kernel_version;
 	vb2_error_t rv = VB2_ERROR_LK_NO_KERNEL_FOUND;
+	vb2_error_t active_slot_rv = VB2_ERROR_LK_NO_KERNEL_FOUND;
 
 	/* Clear output params */
 	params->partition_number = 0;
@@ -732,6 +733,10 @@ vb2_error_t vb2api_load_kernel(struct vb2_context *ctx,
 			rv = VB2_ERROR_LK_INVALID_KERNEL_FOUND;
 		}
 
+		/* Store error from active slot */
+		if (found_partitions == 1)
+			active_slot_rv = rv;
+
 		if (rv == VB2_SUCCESS)
 			break;
 
@@ -739,7 +744,9 @@ vb2_error_t vb2api_load_kernel(struct vb2_context *ctx,
 		GptUpdateKernelEntry(&gpt, GPT_UPDATE_ENTRY_BAD);
 	}
 	if (rv) {
-		if (found_partitions > 0)
+		if (active_slot_rv == VB2_ERROR_AVB_ERROR_ROLLBACK_INDEX)
+			rv = VB2_ERROR_LK_ROLLBACK;
+		else if (found_partitions > 0)
 			rv = VB2_ERROR_LK_INVALID_KERNEL_FOUND;
 		else
 			rv = VB2_ERROR_LK_NO_KERNEL_FOUND;
