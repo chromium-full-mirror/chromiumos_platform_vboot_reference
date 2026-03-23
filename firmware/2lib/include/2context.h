@@ -198,6 +198,20 @@ enum vb2_context_flags {
 	 * TPM before jumping to kernel.
 	 */
 	VB2_CONTEXT_DISABLE_TPM = (1 << 28),
+
+	/*
+	 * Indicates there is only one RW slot present. Caller should set this
+	 * flag when initializing the context if the flash layout does not
+	 * support two RW slots.
+	 */
+	VB2_CONTEXT_SLOT_A_ONLY = (1 << 29),
+
+	/*
+	 * Fastboot is allowed. Based on boot mode, GBB Flags, and OEM Lock.
+	 *
+	 * See more: b/484260435
+	 */
+	VB2_CONTEXT_FASTBOOT_ALLOWED = (1 << 30),
 };
 
 /* Helper for aligning fields in vb2_context. */
