@@ -894,10 +894,6 @@ static int update_ec_firmware(struct updater_config *cfg)
 		break;
 	}
 
-	case EC_RECOVERY_DONE:
-		/* Done by some quirks, for example EC RO software sync. */
-		return 0;
-
 	default:
 		return r;
 	}
