@@ -189,9 +189,6 @@ uint32_t vb2_nv_get(struct vb2_context *ctx, enum vb2_nv_param param)
 	case VB2_NV_BOOT_ON_AC_DETECT:
 		return GETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_BOOT_ON_AC_DETECT);
 
-	case VB2_NV_TRY_RO_SYNC:
-		return GETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_TRY_RO_SYNC);
-
 	case VB2_NV_BATTERY_CUTOFF_REQUEST:
 		return GETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_BATTERY_CUTOFF);
 
@@ -223,6 +220,7 @@ uint32_t vb2_nv_get(struct vb2_context *ctx, enum vb2_nv_param param)
 	case VB2_NV_DEPRECATED_FASTBOOT_UNLOCK_IN_FW:
 	case VB2_NV_DEPRECATED_ENABLE_ALT_OS_REQUEST:
 	case VB2_NV_DEPRECATED_DISABLE_ALT_OS_REQUEST:
+	case VB2_NV_DEPRECATED_TRY_RO_SYNC:
 		return 0;
 	}
 
@@ -397,10 +395,6 @@ void vb2_nv_set(struct vb2_context *ctx,
 		SETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_BOOT_ON_AC_DETECT);
 		break;
 
-	case VB2_NV_TRY_RO_SYNC:
-		SETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_TRY_RO_SYNC);
-		break;
-
 	case VB2_NV_BATTERY_CUTOFF_REQUEST:
 		SETBIT(VB2_NV_OFFS_MISC, VB2_NV_MISC_BATTERY_CUTOFF);
 		break;
@@ -435,6 +429,7 @@ void vb2_nv_set(struct vb2_context *ctx,
 	case VB2_NV_DEPRECATED_FASTBOOT_UNLOCK_IN_FW:
 	case VB2_NV_DEPRECATED_ENABLE_ALT_OS_REQUEST:
 	case VB2_NV_DEPRECATED_DISABLE_ALT_OS_REQUEST:
+	case VB2_NV_DEPRECATED_TRY_RO_SYNC:
 		return;
 	}
 
