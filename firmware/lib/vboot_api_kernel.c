@@ -55,6 +55,7 @@ static int is_valid_disk(VbDiskInfo *info, uint32_t disk_flags)
 {
 	return info->bytes_per_lba >= 512 &&
 		(info->bytes_per_lba & (info->bytes_per_lba - 1)) == 0 &&
+		info->bytes_per_lba <= (4 << 10) &&
 		info->lba_count >= 16 &&
 		(info->flags & disk_flags & VB_DISK_FLAG_SELECT_MASK) &&
 		((info->flags & VB_DISK_FLAG_SELECT_MASK) &
