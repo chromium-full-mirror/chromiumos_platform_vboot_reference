@@ -408,6 +408,23 @@ void vb2api_previous_boot_fail(struct vb2_context *ctx,
 			       uint8_t reason, uint8_t subcode);
 
 /**
+ * Set VB2_NV_FW_OTHER_SLOT_FAILED from RW firmware.
+ *
+ * Firmware branch backport only, for devices whose RO firmware doesn't set
+ * VB2_NV_FW_OTHER_SLOT_FAILED in vb2_select_fw_slot(). On a boot where RO
+ * switched firmware slots, this sets it to whether the slot RO switched away
+ * from had failed. It's a no-op if no slot was chosen this boot (e.g. recovery
+ * or S3 resume), and calling it again in the same boot has no effect.
+ *
+ * Call this at the very start of the first firmware stage loaded from the RW
+ * slot, then save nvdata before anything can reset the system. vb2api_fail()
+ * also calls this, in case the early call is missing.
+ *
+ * @param ctx		Vboot context
+ */
+void vb2api_rw_backport_hook(struct vb2_context *ctx);
+
+/**
  * Entry point for setting up a context that can only load and verify a kernel.
  *
  * The only allowed usage is to call vb2api_init, then this entry point,

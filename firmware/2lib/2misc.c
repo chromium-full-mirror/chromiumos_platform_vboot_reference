@@ -82,11 +82,24 @@ vb2_error_t vb2_read_gbb_header(struct vb2_context *ctx,
 	return VB2_SUCCESS;
 }
 
+void vb2api_rw_backport_hook(struct vb2_context *ctx)
+{
+	struct vb2_shared_data *sd = vb2_get_sd(ctx);
+
+	/* No slot was chosen this boot (e.g. recovery or S3 resume). */
+	if (!(sd->status & VB2_SD_STATUS_CHOSE_SLOT))
+		return;
+
+	if (sd->fw_slot != sd->last_fw_slot)
+		vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED,
+			   sd->last_fw_result == VB2_FW_RESULT_FAILURE);
+}
+
 static void fail_impl(struct vb2_context *ctx,
 		      uint8_t reason, uint8_t subcode, bool previous_boot)
 {
 	struct vb2_shared_data *sd = vb2_get_sd(ctx);
-	uint32_t last_fw_slot, last_fw_result, fw_slot;
+	uint32_t fw_slot;
 
 	/* If NV data hasn't been initialized, initialize it now */
 	if (!(sd->status & VB2_SD_STATUS_NV_INIT))
@@ -104,8 +117,6 @@ static void fail_impl(struct vb2_context *ctx,
 
 	/* See if we were far enough in the boot process to choose a slot */
 	if (previous_boot || (sd->status & VB2_SD_STATUS_CHOSE_SLOT)) {
-		last_fw_slot = vb2_nv_get(ctx, VB2_NV_FW_PREV_TRIED);
-		last_fw_result = vb2_nv_get(ctx, VB2_NV_FW_PREV_RESULT);
 		fw_slot = vb2_nv_get(ctx, VB2_NV_FW_TRIED);
 
 		/* Boot failed */
@@ -123,19 +134,24 @@ static void fail_impl(struct vb2_context *ctx,
 			vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1 - fw_slot);
 
 			/*
-			 * If we didn't try the other slot last boot, or we
-			 * tried it and it didn't fail, try it next boot.
+			 * If the other slot hadn't failed when we last switched
+			 * here from it, try it next boot. Extra reboots on this
+			 * slot (e.g. for EC or CSE sync) don't clear this
+			 * record, unlike FW_PREV_*.
+			 *
+			 * In case the early vb2api_rw_backport_hook() call
+			 * hasn't happened, make sure the record is up to date
+			 * for this boot first.
 			 */
-			if (last_fw_slot != 1 - fw_slot ||
-			    last_fw_result != VB2_FW_RESULT_FAILURE)
+			vb2api_rw_backport_hook(ctx);
+			if (!vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED))
 				return;
 		}
 	}
 
 	/*
 	 * If we're still here, we failed before choosing a slot, or both
-	 * this slot and the other slot failed in successive boots.  So we
-	 * need to go to recovery.
+	 * this slot and the other slot failed.  So we need to go to recovery.
 	 *
 	 * Set a recovery reason and subcode only if they're not already set.
 	 * If recovery is already requested, it's a more specific error code

@@ -57,6 +57,16 @@ static void reset_common_data(void)
 	SET_BOOT_MODE(ctx, VB2_BOOT_MODE_NORMAL);
 };
 
+/* Simulate a reboot: nvdata persists, but the workbuf (ctx, sd) doesn't. */
+static void simulate_reboot(void)
+{
+	uint8_t nvdata[sizeof(ctx->nvdata)];
+
+	memcpy(nvdata, ctx->nvdata, sizeof(nvdata));
+	reset_common_data();
+	memcpy(ctx->nvdata, nvdata, sizeof(nvdata));
+}
+
 /* Mocked functions */
 
 struct vb2_gbb_header *vb2_get_gbb(struct vb2_context *c)
@@ -391,8 +401,7 @@ static void fail_tests(void)
 	vb2_nv_set(ctx, VB2_NV_TRY_COUNT, 3);
 	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_UNKNOWN);
 	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_TRIED, 1);
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_RESULT, VB2_FW_RESULT_UNKNOWN);
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 0);
 	sd->status |= VB2_SD_STATUS_CHOSE_SLOT;
 	vb2api_fail(ctx, 5, 6);
 	TEST_EQ(vb2_nv_get(ctx, VB2_NV_RECOVERY_REQUEST), 0, "vb2_failover");
@@ -405,8 +414,7 @@ static void fail_tests(void)
 
 	/* Fail with other slot already failing triggers recovery */
 	reset_common_data();
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_TRIED, 0);
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
 	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 1);
 	sd->status |= VB2_SD_STATUS_CHOSE_SLOT;
 	vb2api_fail(ctx, 7, 8);
@@ -456,8 +464,7 @@ static void previous_boot_fail_tests(void)
 
 	/* Fail with other slot already failing triggers recovery */
 	reset_common_data();
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_TRIED, VB2_FW_SLOT_A);
-	vb2_nv_set(ctx, VB2_NV_FW_PREV_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
 	vb2_nv_set(ctx, VB2_NV_FW_TRIED, VB2_FW_SLOT_B);
 	vb2_nv_set(ctx, VB2_NV_TRY_COUNT, 3);
 	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_UNKNOWN);
@@ -877,6 +884,105 @@ static void select_slot_tests(void)
 	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_PREV_TRIED), 1, "prev B");
 	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_PREV_RESULT),	VB2_FW_RESULT_FAILURE,
 		"prev failure");
+
+	/* Slot selection doesn't record the switch (only RW does) */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 0,
+		"select doesn't record switch");
+}
+
+static void rw_backport_hook_tests(void)
+{
+	/* Switching away from a failed slot records the failure */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 1,
+		"switch from failed slot");
+
+	/* Switching away from a good slot clears the record */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_SUCCESS);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 0,
+		"switch from good slot");
+
+	/* Falling back after running out of tries is a switch too */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_TRYING);
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_TRIED), 1, "fell back to B");
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 0,
+		"fallback: A was not failed");
+
+	/* Staying on the same slot keeps the record */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 1);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 1,
+		"same slot keeps record");
+
+	/* No-op if no slot was chosen this boot */
+	reset_common_data();
+	sd->fw_slot = 1;
+	sd->last_fw_slot = 0;
+	sd->last_fw_result = VB2_FW_RESULT_FAILURE;
+	vb2api_rw_backport_hook(ctx);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_FW_OTHER_SLOT_FAILED), 0,
+		"no slot chosen");
+
+	/* An extra reboot on the new slot doesn't hide the failure */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	simulate_reboot();  /* Extra reboot, e.g. for EC sync */
+	vb2_select_fw_slot(ctx);
+	vb2api_rw_backport_hook(ctx);
+	vb2api_fail(ctx, 11, 12);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_RECOVERY_REQUEST), 11,
+		"both slots bad after extra reboot");
+
+	/* A failure without the early call still sees the switch */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_FAILURE);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_fail(ctx, 13, 14);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_RECOVERY_REQUEST), 13,
+		"both slots bad, no early call");
+
+	/* A failure after switching from a good slot tries it again */
+	reset_common_data();
+	vb2_nv_set(ctx, VB2_NV_FW_OTHER_SLOT_FAILED, 1);
+	vb2_nv_set(ctx, VB2_NV_FW_TRIED, 0);
+	vb2_nv_set(ctx, VB2_NV_FW_RESULT, VB2_FW_RESULT_SUCCESS);
+	vb2_nv_set(ctx, VB2_NV_TRY_NEXT, 1);
+	vb2_select_fw_slot(ctx);
+	vb2api_fail(ctx, 15, 16);
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_RECOVERY_REQUEST), 0,
+		"other slot good, no recovery");
+	TEST_EQ(vb2_nv_get(ctx, VB2_NV_TRY_NEXT), 0, "  try other slot");
 }
 
 static void need_reboot_for_display_tests(void)
@@ -1266,6 +1372,7 @@ int main(int argc, char* argv[])
 	enable_dev_tests();
 	tpm_clear_tests();
 	select_slot_tests();
+	rw_backport_hook_tests();
 	need_reboot_for_display_tests();
 	clear_recovery_tests();
 	get_recovery_reason_tests();

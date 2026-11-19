@@ -128,6 +128,11 @@ enum vb2_nv_param {
 	VB2_NV_MINIOS_PRIORITY,
 	/* OEM lock: 0=disabled, 1=enabled. */
 	VB2_NV_OEM_LOCK,
+	/*
+	 * Whether the other firmware slot had failed when we last switched
+	 * away from it: 0=no, 1=yes.
+	 */
+	VB2_NV_FW_OTHER_SLOT_FAILED,
 };
 
 /*
